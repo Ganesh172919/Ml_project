@@ -1,0 +1,31 @@
+function ml_start_polling() {
+    var result_div = $('#dryrun-result');
+    var poll_url = $('#dryrun-result').find('#submission-result-poll-url').attr('url');
+    if (result_div.find('[replaceData="true"]').length > 0) {
+        setTimeout(poll_ml_result.bind(this, poll_url), 1000);
+    }
+}
+
+function poll_ml_result(poll_url) {
+    //console.log(poll_url);
+    $.ajax({
+        url: poll_url,
+        success: function(submission_response) {
+            //console.log(submission_response);
+            $('#dryrun-result').html(submission_response);
+            ml_start_polling();
+        },
+    });
+}
+
+$(document).ready(function () {
+    $('.call-ajax').live('click', function (e) {
+        var url = $(this).attr('ajax');
+
+        // make the ajax call
+        var xhr = $.ajax({
+            url: url,
+            cache: false,
+        });
+    });
+});

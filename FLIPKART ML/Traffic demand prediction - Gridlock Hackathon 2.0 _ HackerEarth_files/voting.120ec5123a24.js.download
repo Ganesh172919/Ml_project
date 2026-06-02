@@ -1,0 +1,130 @@
+$(document).ready(function() {
+    $('.polls-comment a').live('click',function(){
+
+        var link = $(this).attr('link');
+
+        // find out the action
+        var split_link = $('.polls-comment a').attr('link').split('/');
+        var action = split_link[split_link.length-2];
+
+        // find out the count span associated with the poll
+        var count_span = $(this).parent().find('.polls-count');
+        
+        // find out if we have to show only positive count
+        if (count_span && count_span.hasClass('only-positive')) {
+            var only_positive = true;
+        }
+        else {
+            var only_positive = false;
+        }
+
+        // find the other element for this action
+        // such as unlike for like and downvote for upvote
+        if ($(this).hasClass('polls-up')) {
+            var other = $(this).parent().find('.polls-down');
+        }
+        else {
+            var other = $(this).parent().find('.polls-up');
+        }
+
+        // save the originals in case the function fails
+	var vote_count = 0;
+        var count_span_data = count_span.text().trim().split(" ");
+        for (i in count_span_data) {
+           var data = count_span_data[i];
+           if (!isNaN(data)) {
+               vote_count = parseInt(data);
+               break;
+           }
+        }
+
+	var originals = {
+            count: vote_count,
+            this_class : $(this).attr('class'),
+            other_class: other.attr('class')
+        };
+        // user has clicked on up action
+        if($(this).hasClass('polls-up')){
+
+            // user has not done this action earlier
+            if ($(this).hasClass('polls-unset-vote')){
+
+                if (other && other.hasClass('polls-set-vote')) {
+
+                    // increase the count by 1 if we are showing only positive count
+                    // else update by 2
+                    if (count_span) {
+
+                        if(only_positive)
+                            var new_count = originals['count'] + 1;
+                        else
+                            var new_count = originals['count'] + 2;
+                        var vote_text = ((new_count) <= 1) ? COMMENTS_TEXT.VOTE : COMMENTS_TEXT.VOTES;
+                        count_span.text(vote_text.format({votes_count:new_count}));
+                    }
+
+                    // add and remove appropriate classes
+                    other.removeClass('polls-set-vote');
+                    other.addClass('polls-unset-vote');
+                    $(this).removeClass('polls-unset-vote');
+                    $(this).addClass('polls-set-vote');
+
+                } else {
+
+                    // update the count only if the count box exist
+                    // up the count by 1
+                    if (count_span) {
+                        var new_count = originals['count'] + 1;
+                        var vote_text = ((new_count) <= 1) ? COMMENTS_TEXT.VOTE : COMMENTS_TEXT.VOTES;
+                        count_span.text(vote_text.format({votes_count:new_count}));
+                    }
+                    $(this).removeClass('polls-unset-vote');
+                    $(this).addClass('polls-set-vote');
+                }
+            }
+
+            // user is un-doing the previous action
+            else {
+
+                // down the count by 1
+                if (count_span ) {
+                    var new_count = originals['count'] - 1;
+                    var vote_text = ((new_count) <= 1) ? COMMENTS_TEXT.VOTE : COMMENTS_TEXT.VOTES;
+                    count_span.text(vote_text.format({votes_count:new_count}));
+                }
+                $(this).removeClass('polls-set-vote');
+                $(this).addClass('polls-unset-vote');
+
+            }
+        }
+
+        // save the current element for the fallback function
+        var this_element = $(this);
+
+        $.ajax({
+            type: "POST",
+            url: link,
+            complete: function(response) {
+                if (response.responseText == 'error') {
+                     if(count_span) 
+                    count_span.text(originals.count);
+                    this_element.attr('class',originals.this_class);
+                    other.attr('class', originals.other_class);
+                }
+            }
+            // reset to originals in case of error
+        });
+        return false;
+
+    });
+
+    $("#sort-filter").live('change', function(event){
+        if ($(this).val() == 'Submitted'){
+            $("#sort-comments-by-date").click();
+        }
+        else{
+            $("#sort-comments-by-votes").click();
+        }
+    });
+});
+

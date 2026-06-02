@@ -1,0 +1,196 @@
+var HISTORY_QUEUE = [];
+var DOCUMENT_TITLE = '';
+var CLICK_BY_CODE = false;
+var CODE_STATE_CHANGE = false;
+var HISTORY_LIST = [];
+
+// whenever there is press of back or forward
+// button then the there will be different sections
+// of the url that have been set by history.js?v=0.1
+// and they need to be loaded appropriately
+var loadHistorySections = function() {
+
+    var current_path = window.location.href;
+    var states = History.savedStates;
+    var prevUrl = states[states.length - 2].url;
+
+    var history_path = current_path.replace(CURRENT_PATH, '');
+    var prev_history_path = prevUrl.replace(CURRENT_PATH, '');
+
+    // split the path on / character
+    var paths = history_path.split('/');
+    if (paths[paths.length-1] == '') {
+        paths.pop();
+    }
+
+    var prev_paths = prev_history_path.split('/');
+    if (prev_paths[prev_paths.length - 1] == '') {
+        prev_paths.pop();
+    }
+
+    // segments, because when we split
+    // on / there might be an empty path segment
+    for (var i = 0; i < paths.length; i++) {
+        var path = paths[i];
+        var prev_path = prev_paths[i];
+
+        if (path != prev_path || i == (paths.length-1)) {
+            var element = $('#'+path);
+            CLICK_BY_CODE = true;
+            element.click();
+            break;
+        }
+    }
+}
+
+var pageLoadHistorySections = function() {
+
+    if (HISTORY_QUEUE.length > 0) {
+
+        // remove the first element
+        var element_id = HISTORY_QUEUE.shift();
+        var element = $('#'+element_id);
+
+        // if the element exists then click the
+        // element
+        if (element.length > 0) {
+
+            CLICK_BY_CODE = true;
+            element.click();
+
+            // Clear the queue only when the id is
+            // available in the doc
+            if (HISTORY_QUEUE.length > 0) {
+                $(document).ajaxStop(function() {
+                    var element_id = HISTORY_QUEUE[0];
+                    var element = $('#'+element_id);
+                    var actual_id = element.attr('id');
+                    if (typeof actual_id !== 'undefined') {
+                        CLICK_BY_CODE = true;
+                        element.click();
+                        element_id = HISTORY_QUEUE.shift();
+                    }
+                });
+            }
+        }
+    } else {
+
+        if(ID_CLICK_BY_HISTORY) {
+            $('#'+ID_CLICK_BY_HISTORY).click();
+        }
+    }
+}
+
+$(document).ready(function() {
+
+    // Bind to StateChange Event
+    History.Adapter.bind(window,'statechange',function() {
+        var State = History.getState();
+        if (!CODE_STATE_CHANGE) {
+            loadHistorySections();
+        }
+        CODE_STATE_CHANGE = false;
+    });
+
+    // set the document title
+    DOCUMENT_TITLE = document.title
+
+    // extract the history array if there is any
+    HISTORY_LIST = $.parseJSON(HISTORY);
+
+    var get_parameters = window.location.search;
+    CURRENT_PATH = CURRENT_PATH.replace(get_parameters, '');
+
+    if (HISTORY_LIST) {
+        for (var i = 0; i < HISTORY_LIST.length; i++) {
+            var historyString = '/' + HISTORY_LIST[i] + '/';
+            var lastIndexOccurance = CURRENT_PATH.lastIndexOf(historyString);
+        
+            if (lastIndexOccurance !== -1) {
+                CURRENT_PATH = CURRENT_PATH.substr(0, lastIndexOccurance) + '/' + CURRENT_PATH.substr(lastIndexOccurance + historyString.length , CURRENT_PATH.length);
+            }
+            
+            HISTORY_QUEUE.push(HISTORY_LIST[i]);
+
+        }
+        while( CURRENT_PATH[CURRENT_PATH.length-1] === '/' && CURRENT_PATH[CURRENT_PATH.length-2] === '/') {
+            CURRENT_PATH = CURRENT_PATH.substring(0, CURRENT_PATH.length-1);
+        }
+    }
+
+    // change the url using history.js?v=0.1
+    $('.history').live('click', function() {
+
+        // if the click of the element in the DOM
+        // has been via code then we don't need to
+        // change the url as it has been triggered by
+        // the change of url itself
+        if (CLICK_BY_CODE) {
+            var State = History.getState();
+            CLICK_BY_CODE = false;
+            return;
+        }
+
+        var $this = $(this);
+        var level = parseInt($this.attr('level'));
+        var slug = $this.attr('id');
+        var pushes = $this.attr('pushes');
+        var current_path = window.location.href;
+        var get_parameters = window.location.search;
+
+        // Remove get parameters from url
+        current_path = current_path.replace(get_parameters, '');
+
+        var history_path = current_path.replace(CURRENT_PATH, '');
+
+        // split the path on / character
+        var paths = history_path.split('/');
+
+        // array that will store the path
+        // segments, because when we split
+        // on / there might be an empty path segment
+        var new_paths = [];
+        for (var i = 0; i < paths.length; i++) {
+            var path = paths[i];
+            if (path.length != 0) {
+                new_paths.push(path);
+            }
+        }
+
+        if (pushes) {
+            var push_paths = [];
+            for (var i = 1; i <= pushes; i++) {
+                push_paths[i-1] = $this.attr('push'+i);
+            }
+        }
+
+        // create the new url
+        var new_url = CURRENT_PATH;
+
+        for (var i=1; i < level; i++) {
+            new_url = new_url + new_paths[i-1] + '/' ;
+        }
+
+        if (!pushes) {
+            new_url += slug + '/';
+        }
+
+        if (pushes) {
+            for (var i = 0; i < push_paths.length; i++) {
+                new_url += push_paths[i] + '/';
+            }
+        }
+
+        // Append get parameters
+        new_url += get_parameters;
+
+        CODE_STATE_CHANGE = true;
+        History.pushState({}, DOCUMENT_TITLE, new_url);
+        return;
+    });
+
+    // load any sections from history
+    // always keep this at the end
+    pageLoadHistorySections();
+
+});

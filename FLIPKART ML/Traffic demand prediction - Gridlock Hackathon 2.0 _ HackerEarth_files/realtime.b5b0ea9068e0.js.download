@@ -1,0 +1,138 @@
+function subscribeCollection(collection_name) {
+    // Get Firestore DB reference
+    var firestore_db = firebase.firestore(firebaseApp);
+    if (firestore_db) {
+        // Get Firestore collection reference
+        var collection_ref = firestore_db.collection(collection_name);
+        if (collection_ref) {
+            $('#comment-realtime-error').html('');
+            $('#comment-realtime-error').hide();
+        }
+        else {
+            $('#comment-realtime-error').html('Error in loading realtime comments. Please refresh the page.');
+            $('#comment-realtime-error').show();
+        }
+
+        const handleCommentSubscriptionWithInvocation = countFunctionInvocation(handleCommentSubscription, 1);
+        collection_ref.onSnapshot(handleCommentSubscriptionWithInvocation);
+    }
+}
+
+function handleCommentSubscription(querySnapshot) {
+    querySnapshot.docChanges().forEach(function (change) {
+        // Change type is 'added' when document is added in Firestore
+        if (change.type === 'added') {
+            var change_data = change.doc.data();
+            var data = change_data['data'];
+            var comment_id = data['comment_id'];
+            var parent_id = data['parent_id'];
+            var is_first_child = data['is_first_child'];
+            var username = data['username'];
+            var html = data['html'];
+            var ctype_id = data['ctype_id'];
+            var object_pk = data['object_pk'];
+            // Remove delete link if comment was not posted
+            // by current user.
+            var current_username = $('#username').text();
+            var is_superuser = $('#is-superuser').length;
+            var is_event_admin = $('#is-event-admin').length;
+            if (!(username == current_username)) {
+                // Add comment
+                addComment(comment_id, parent_id, html, ctype_id, object_pk, is_first_child);
+                // Remove edit link
+                var edit_link = $('#c' + comment_id + ' .edit-link');
+                edit_link.remove();
+            }
+            if (!(username == current_username || is_superuser || is_event_admin)) {
+                try {
+                    // Remove delete link
+                    var delete_link = $('#c' + comment_id + ' .delete-link');
+                    delete_link.remove();
+
+                } catch (err) {
+                    console.log(err);
+                }
+            } else if (username == current_username) {
+                try {
+                    // Remove private msg link
+                    var private_message_div = $('#c' + comment_id + ' .private-message-link');
+                    private_message_div.remove();
+                } catch (err) {
+                    console.log(err);
+                }
+            }
+        }
+
+        // Change type is 'modified' when a document is modified in Firestore
+        if (change.type === 'modified') {
+            var change_data = change.doc.data();
+            var data = change_data['data'];
+            var event = change_data['event'];
+            if (event === 'comment_edited') {
+                var comment_id = data['comment_id'];
+                var username = data['username'];
+                var html = data['html'];
+                var ctype_id = data['ctype_id'];
+                var object_pk = data['object_pk'];
+                // Edit comment
+                // In this we need to replace whole comment container but we can not
+                // change value of c{{comment.id}} because child comments are also mentioned
+                // in that. So replacing the immediate child comment container of the comment
+                $('#comment-container-' + comment_id).replaceWith(html);
+
+                var current_username = $('#username').text();
+                var is_superuser = $('#is-superuser').length;
+                var is_event_admin = $('#is-event-admin').length;
+                if (!(username == current_username)) {
+                    // Remove edit link
+                    var edit_link = $('#c' + comment_id + ' .edit-link');
+                    edit_link.remove();
+                }
+                if (!(username == current_username || is_superuser || is_event_admin)) {
+                    try {
+                        // Remove delete link
+                        var delete_link = $('#c' + comment_id + ' .delete-link');
+                        delete_link.remove();
+                    } catch (err) {
+                        console.log(err);
+                    }
+                } else if (username == current_username) {
+                    try {
+                        // Remove private msg link
+                        var private_message_div = $('#c' + comment_id + ' .private-message-link');
+                        private_message_div.remove();
+                    } catch (err) {
+                        console.log(err);
+                    }
+                }
+            }
+            if (event === 'comment_deleted') {
+                var comment_id = data['comment_id'];
+                var root_comment_id = data['root_comment_id'];
+                var root_child_exists = data['root_child_exists'];
+                var ctype_id = data['ctype_id'];
+                var object_pk = data['object_pk'];
+                removeComment(comment_id, root_comment_id, root_child_exists, ctype_id, object_pk);
+            }
+        }
+    });
+}
+
+/* 
+Firestore onSnapshot() sends initial payload which we don't want.
+We only need to listen for updates in a collection
+This function will make sure that the `subscription_function` is called 2nd time,
+so that we get only the updates from a collection. 
+*/
+function countFunctionInvocation(subscription_function, invoke_before_execution) {
+    var count = 0;
+    return function (args) {
+        count++;
+        if (count <= invoke_before_execution) {
+            return true;
+        }
+        else {
+            return subscription_function(args, count);
+        }
+    };
+}

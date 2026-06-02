@@ -1,0 +1,352 @@
+function onCommentError($submit_button, $this, error) {
+    // reset the form for new comments
+    $submit_button.attr('disabled', null);
+    $submit_button.val(COMMENTS_TEXT.ADD_COMMENT);
+    // show error
+    if(!error) {
+        error = COMMENTS_TEXT.ERROR_TRY_AGAIN;
+    }
+    $this.children('.form-error').show().html(error);
+}
+
+function animateComment(comment_id) {
+    try {
+        $('#c'+comment_id).animate({backgroundColor: '#fffcdf'}, 200).animate({backgroundColor: "#f5f7f8"}, 800);
+    } catch(err) {
+    }
+}
+
+/**
+ * Util method to reset comment count
+ */
+function resetCommentCount(ctype_id, object_pk) {
+    var count = $('#c-'+ctype_id+'-'+object_pk).find('.active-comment').length;
+    $('#comment-count-'+ctype_id+'-'+object_pk).text(' '+ COMMENTS_TEXT.COMMENTS + ' ('+count+') ');
+    if(count==0) {
+        $('.threadedCommentsForm').css('border-bottom', 'none');
+        $('#id_comment').attr('placeholder', COMMENTS_TEXT.START_DISCUSSION);
+    } else {
+        $('.threadedCommentsForm').css('border-bottom', '1px dashed #d9deea');
+        $('#id_comment').attr('placeholder', COMMENTS_TEXT.JOIN_DISCUSSION);
+    }
+}
+
+
+/**
+ * Util method to add comment
+ */
+function addComment(comment_id, parent_id, html, ctype_id, object_pk, is_first_child) {
+    if(parent_id) {
+        if(is_first_child) {
+            var parent_comment = $('#c'+parent_id);
+        } else {
+            var parent_comment = $('#c'+parent_id+' ul').first();
+        }
+    } else {
+        var parent_comment = $('#c-'+ctype_id+'-'+object_pk);
+    }
+    // Append comment
+    if(parent_comment) {
+        parent_comment.append(html);
+        // Animation effect
+        animateComment(comment_id);
+    }
+    // Reset comment count
+    resetCommentCount(ctype_id, object_pk);
+    if(parent_id) {
+        // Add child-exists class
+        var comment_info_div = $(parent_comment.children('.comment-info-container')[0]);
+        if(!comment_info_div.hasClass('child-exists')) {
+            comment_info_div.addClass('child-exists');
+        }
+        // Remove last class from existing li and add to latest
+        if(!is_first_child) {
+            parent_comment.children('li').not('.hidden').removeClass('last');
+            $('#c'+comment_id).addClass('last');
+        }
+    }
+}
+
+/**
+ * Util method to remove comment
+ */
+function removeComment(comment_id, root_comment_id, root_child_exists, ctype_id, object_pk) {
+    var comment_div = $('#c'+root_comment_id);
+    comment_div.removeClass('active-comment');
+    if(root_child_exists) {
+        // decrease opacity of comment container and avatar div
+        var avatar_div = $(comment_div.children('.comment-user-image')[0]);
+        var comment_info_div = $(comment_div.find('.comment-info-container')[0]);
+        avatar_div.addClass('deleted-comment');
+        comment_info_div.addClass('deleted-comment');
+        // replace the text of the comment
+        var comment_st_div = $(comment_info_div.children('.comment-statement')[0]);
+        comment_st_div.html(COMMENTS_TEXT.COMMENT_DELETED);
+
+        var comment_actions_div = comment_info_div.children('.comment-actions');
+
+        try {
+            // Remove delete link
+            var delete_link = $(comment_actions_div.children('.delete-link'))[0];
+            delete_link.remove();
+        }
+        catch(err) {}
+
+        try {
+            // Remove edit link
+            var edit_link = $(comment_actions_div.children('.edit-link'))[0];
+            edit_link.remove();
+        }
+        catch(err) {}
+
+        try {
+            // Remove poll link
+            var poll_link = $(comment_actions_div.children('.poll-link'))[0];
+            poll_link.remove();
+        }
+        catch(err) {}
+
+        try {
+            // Remove message link
+            var message_link = $(comment_actions_div.children('.private-message-link'))[0];
+            message_link.remove();
+        }
+        catch(err) {}
+
+        try {
+            // Remove share link
+            var share_link = $(comment_actions_div.children('.share-comment'))[0];
+            share_link.remove();
+        }
+        catch(err) {}
+
+        try {
+            // hide the reply div
+            var reply_div = $(comment_actions_div.children('.reply-link'))[0];
+            reply_div.remove();
+        } catch(err) {}
+    } else {
+        var comment_parent = comment_div.parent();
+        // Remove comment element
+        comment_div.remove();
+        // Add class last
+        var childs = comment_parent.children('li').not('.hidden');
+        var last_child = childs.length && $(childs[childs.length-1]);
+        if(last_child) {
+            if(!last_child.hasClass('last'))
+                last_child.addClass('last');
+        } else {
+            var comment_comment_parent = comment_parent.parent();
+            var comment_info_div = $(comment_comment_parent.children('.comment-info-container')[0]);
+            comment_info_div.removeClass('child-exists');
+            comment_parent.remove();
+        }
+    }
+    // Reset comment count
+    resetCommentCount(ctype_id, object_pk);
+}
+
+function focusCommentBox() {
+    if(typeof $this != "undefined") {
+        var target = $this.attr('target');
+        $('#'+target+' textarea').focus();
+    }
+}
+
+$(document).ready(function() {
+    // Function for posting a comment via ajax
+    $('.comment-form').live('submit', function(event) {
+        $this = $(this);
+        if ($this.find('#id_comment').val() == '') {
+            $this.children('.form-error').show().text(COMMENTS_TEXT.COMMENT_BLANK_ERROR);
+            return false;
+        }
+        submit_button = $this.find(':submit');
+        $submit_button = $(submit_button);
+        $submit_button.val(COMMENTS_TEXT.POSTING);
+        $submit_button.attr('disabled', 'disabled');
+        $.ajax({
+            type: 'POST',
+            data: $this.serialize(),
+            url: $('#post-comment-url').text(),
+            cache: false,
+            dataType: 'json',
+            success: function(response) {
+                if(response['status'] == AJAX_OK) {
+                    var comment_id = response['comment_id'];
+                    var parent_id = response['parent_id'];
+                    var is_first_child = response['is_first_child'];
+                    var html = response['html'];
+                    var ctype_id = response['ctype_id'];
+                    var object_pk = response['object_pk'];
+                    if(parent_id) {
+                        // Hide comment form
+                        $('#reply-'+parent_id).hide();
+                    }
+                    // Hide error divs
+                    $('.form-error').hide();
+                    // Remove private message link
+                    // Add comment
+                    addComment(comment_id, parent_id, html, ctype_id, object_pk, is_first_child);
+                    try {
+                        var private_message_div = $('#c'+comment_id+' .private-message-link');
+                        private_message_div.remove();
+                    } catch(err) {
+                        console.log(err);
+                    }
+                    // reset the form for new comments
+                    $submit_button.attr('disabled', null);
+                    $submit_button.val(COMMENTS_TEXT.ADD_COMMENT);
+                    $this.get(0).reset();
+                    // Scroll to comment
+                    if(!parent_id) {
+                        window.location.hash = "#c" + comment_id;
+                    }
+                }
+                else {
+                    onCommentError($submit_button, $this, response.error);
+                }
+            },
+            error: function(response) {
+            },
+            statusCode: {
+                500: function() {
+                    var error = COMMENTS_TEXT.COMMENT_500;
+                    onCommentError($submit_button, $this, error);
+                }
+            }
+        });
+        return false;
+    });
+    $('.comment-edit-form').live('submit', function(event) {
+        // Do not allow empty comment
+        $this = $(this);
+        if ($this.find('#id_comment').val().trim() == '') {
+            event.preventDefault();
+            $this.children('.form-error').show().text(COMMENTS_TEXT.COMMENT_BLANK_ERROR);
+            return false;
+        }
+        submit_button = $this.find(':submit');
+        $submit_button = $(submit_button);
+        $submit_button.val(COMMENTS_TEXT.POSTING);
+        $submit_button.attr('disabled', 'disabled');
+        return false;
+    });
+
+    // Function for deleting comment via ajax
+    $('.delete-comment').live('click', function(event) {
+        if(!confirm(COMMENTS_TEXT.DELETE_COMMENT)) {
+            return;
+        }
+        $this = $(this);
+        $.ajax({
+            type: 'POST',
+            dataType: 'json',
+            url : $this.attr('ajax'),
+            success: function(response) {
+                if (response['status'] == AJAX_OK) {
+                    var comment_id = response['comment_id'];
+                    var root_comment_id = response['root_comment_id'];
+                    var root_child_exists = response['root_child_exists'];
+                    var ctype_id = response['ctype_id'];
+                    var object_pk = response['object_pk'];
+                    // Remove comment
+                    removeComment(comment_id, root_comment_id, root_child_exists, ctype_id, object_pk);
+                } else {
+                    if(response['error'])
+                        var error = response['error'];
+                    else
+                        var error = COMMENTS_TEXT.DELETE_COMMENT_ERROR;
+                    alert(error);
+                }
+            }
+        });
+    });
+
+    //toggle the reply form on click on reply
+    $('.toggle-reply').live('click', function(event) {
+        $this = $(this);
+        target = $('#' + $this.attr('target'));
+        if($(target).hasClass('hidden')) {
+            $(target).removeClass('hidden');
+            $(target).show();
+            focusCommentBox();
+        }
+        else {
+            $(target).addClass('hidden');
+            $(target).hide();
+        }
+    });
+
+    //reset the form or hide it on clicking cancel
+    $('.reset-comment').live('click', function(event) {
+        $this = $(this);
+        form = $this.parent();
+        form_parent = $(form).parent();
+        $(form).get(0).reset();
+        if (! $(form_parent).hasClass('threadedComments')) {
+            $(form_parent).addClass('hidden');
+            $(form_parent).hide();
+        }
+    });
+
+    // Submit comment using ctrl+enter
+    $('.comment-box').live('keydown', function(e) {
+        if(e.ctrlKey && e.keyCode==13) {
+           $(this).closest('form').find('input[type=submit][name=submit-comment]').click();
+        }
+    });
+
+    $(".share-comment").on("click", function(event) {
+        var $this = $(this).find("a");
+        $("#comment-share-modal").show();
+        $("#comment-share-modal").find(".comment-share-text").text(document.domain + $this.attr("href"));
+        $("#comment-share-modal").modal({
+            onClose: function(dialog){
+                $.modal.close();
+                $('.modal-window').hide();
+            }
+        });
+        event.preventDefault();
+    });
+
+    $(".edit-link a").live("click", function(){
+        var comment_id = $(this).attr("comment_id");
+        if (comment_id){
+            hide_comment(comment_id);
+        }
+    });
+
+    $(".cancel-link").live("click", function(){
+        var comment_id = $(this).attr("comment_id");
+        if (comment_id){
+            show_comment(comment_id);
+        }
+    });
+
+    // show all comments
+
+    $('.suggest-problem').on('mouseover',function(){
+        $(this).find('a').css('color','#4c9cdf');
+    });
+    $('.suggest-problem').on('mouseout',function(){
+        $(this).find('a').css('color','#46535e');
+    });
+    $('.suggest-problem').on('click',function(){
+        url = $(this).find('a').attr('href');
+        window.location.href = url;
+    });
+
+});
+
+function hide_comment(id){
+    $("#comment-container-" + id +" >.comment-info-container >.comment-statement").hide();
+    $("#comment-container-" + id +" >.comment-info-container >.comment-actions").hide();
+    $("#comment-statement-form-" + id).show();
+}
+
+function show_comment(id){
+    $("#comment-container-" + id +" >.comment-info-container >.comment-statement").show();
+    $("#comment-container-" + id +" >.comment-info-container >.comment-actions").show();
+    $("#comment-statement-form-" + id).hide();
+}

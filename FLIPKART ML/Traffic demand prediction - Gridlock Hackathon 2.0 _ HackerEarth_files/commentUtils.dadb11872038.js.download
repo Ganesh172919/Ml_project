@@ -1,0 +1,75 @@
+$(function() {
+
+    $("a.deleteComment").click(function() {
+        var curr_elem = $(this);
+        var link = $(this).attr("href");
+        if (confirm(CONFIRM_COMMENT_DELETE)) { // jshint ignore:line
+            $.ajax({
+                type: "POST",
+                url: link,
+                success: function() {
+                    curr_elem.parent().parent().parent().hide();
+                },
+                error: function(xhr, status, error) {
+                    alert(COMMENT_NOT_DELETED); // jshint ignore:line
+                }
+            });
+        }
+        return false; // prevent loading URL from href
+    });
+
+    $("a.markCommentSpam").click(function() {
+        var curr_elem = $(this);
+        var link = $(this).attr("href");
+        if (confirm(CONFORM_COMMENT_MARK_SPAM)) { // jshint ignore:line
+            $.ajax({
+                type: "POST",
+                url: link,
+                success: function() {
+                    curr_elem.parent().parent().parent().hide();
+                },
+                error: function(xhr, status, error) {
+                    alert(COMMENT_NOT_MARKED_SPAM); // jshint ignore:line
+                }
+            });
+        }
+        return false; // prevent loading URL from href
+    });
+
+    $('.clickme, .showCommentForm').live('click', function() {
+        var comment_div = $(this).next().show();
+        $(this).next().find('textarea').focus();
+        $(this).hide();
+        return false;
+    });
+
+    $('.clickmeToans').click(function() {
+        $('#ans_form').show();
+        return false;
+    });
+
+    $('.comment-form textarea').live('keydown keyup', function() {
+        var lmin = 15;
+        var str = $(this).val();
+        var len = str.length;
+        if (len === 0) {
+            $(this).next().html(ENTER_15_CHARS); // jshint ignore:line
+        } else if (len < lmin) {
+            var count = (lmin - len) + '';
+            var msg = JUST_X_MORE.format({count:count}); // jshint ignore:line
+            $(this).next().text(msg);
+        } else {
+            $(this).next().text('');
+        }
+    });
+
+    $('.comment-form').submit(function(){
+        var lmin = 15;
+        var len = $(this).find('textarea').val().length;
+        if (len < lmin) {
+            return false;
+        } else {
+            return true;
+        }
+    });
+});

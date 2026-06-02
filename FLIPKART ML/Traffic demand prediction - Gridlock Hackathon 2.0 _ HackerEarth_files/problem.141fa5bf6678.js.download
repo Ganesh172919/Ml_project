@@ -1,0 +1,299 @@
+// Global variable for the test timer
+var testIntervalTimer = 0;
+var this_ctx;
+// Append leading 0 in front of the time
+// if there is only one digit in it
+function leadingZero(time) {
+    return (time < 10) ? "0" + time : + time;
+}
+
+$('.comment-form textarea').watermark('Comment');
+$('.comment-form textarea').elastic();
+
+// A class for handling the time widget on the page
+function timeHandler() {
+    // HTML elements for hours, mins and secs
+    this.dElem = $('#days');
+    this.hElem = $('#hours');
+    this.mElem = $('#mins');
+    this.sElem = $('#secs');
+
+    // Updates the time in depending on the secs that are left
+    this.updateTime = function(timeLeft) {
+
+        // calculate the number of days
+        this.days = Math.floor(timeLeft / 86400);
+        //console.log('days');
+        //console.log(this.days);
+
+        // calculate the number of hours
+        timeLeft -= this.days * 86400;
+        this.hours = Math.floor(timeLeft / 3600);
+
+        // calculate the number of mins
+        timeLeft -= this.hours * 3600;
+        this.mins = Math.floor(timeLeft / 60);
+
+        // calculate the number of secs
+        timeLeft -= this.mins * 60;
+        this.secs = timeLeft;
+    }
+
+    this_ctx = this;
+
+    eventStarted = $('.time-box').attr('started');
+    if (eventStarted == 'False') {
+        this.eventStarted = false;
+    } else {
+        this.eventStarted = true;
+    }
+
+    var timeLeft = Number($('.time-box').attr('time'));
+    //console.log(timeLeft);
+    this.updateTime(timeLeft);
+
+    // Set the time in the appropriate elements
+    // on the given page
+    this.setTime = function() {
+        this.dElem.html(leadingZero(this.days));
+        this.hElem.html(leadingZero(this.hours));
+        this.mElem.html(leadingZero(this.mins));
+        this.sElem.html(leadingZero(this.secs));
+        if (this.days > 0) {
+            $('#day-box').show();
+        }
+    }
+
+    // Updates the timer in each of the box
+    this.updateTimer = function() {
+        var days = Number($('#days').html());
+        var hours = Number($('#hours').html());
+        var mins = Number($('#mins').html());
+        var secs = Number($('#secs').html());
+
+        secs = secs - 1;
+
+        if (secs == -1) {
+            mins -= 1;
+            secs = 59;
+            if (mins == -1) {
+                hours -= 1;
+                mins = 59;
+                if (hours == -1) {
+                    days -= 1;
+                    hours = 23;
+                    if (days == -1) {
+                        days = 0;
+                        hours = 0;
+                        mins = 0;
+                        secs = 0;
+                    }
+                }
+            }
+        }
+
+        this.days = days;
+        this.hours = hours;
+        this.mins = mins;
+        this.secs = secs;
+
+        $('#days').html(leadingZero(this.days));
+        $('#hours').html(leadingZero(this.hours));
+        $('#mins').html(leadingZero(this.mins));
+        $('#secs').html(leadingZero(this.secs));
+
+        if (this.days == 0) {
+            $('#day-box').hide();
+        }
+
+        if (days == 0 &&  hours == 0 && mins == 0 && secs == 0) {
+            clearInterval(testIntervalTimer);
+            clearInterval(syncIntervalTimer);
+            var finishUrl = $('.time-box').attr('finish-url');
+            if (typeof finishUrl !== 'undefined') {
+                $.ajax({
+                    type: "POST",
+                    url: finishUrl,
+                    dataType: "json",
+                    success: function(response) {
+                        if(response['status'] == 'OK') {
+                            if (response['ended']) {
+                                alert('The time has completed!');
+                                window.location =  $('.time-box').attr('complete-url');
+                            } else {
+                                timeLeft = response['left'];
+                                this_ctx.updateTime(timeLeft);
+                            }
+                        }
+                    },
+                    error: function(err) {
+                        console.log(err);
+                    }
+                });
+            }
+        }
+    }
+
+    //syncs timer every 2 mins
+    this.syncTimer = function() {
+        var finishUrl = $('.time-box').attr('finish-url');
+        $.ajax({
+            type: "POST",
+            url: finishUrl,
+            dataType: "json",
+            success: function(response){
+                if (response['status'] == 'OK') {
+                    if (response['ended']) {
+                        alert('The time has completed!');
+                        window.location =  $('.time-box').attr('complete-url');
+                    } else {
+                        timeLeft = response['left'];
+                        this_ctx.updateTime(timeLeft);
+                        $('#days').html(leadingZero(this_ctx.days));
+                        $('#hours').html(leadingZero(this_ctx.hours));
+                        $('#mins').html(leadingZero(this_ctx.mins));
+                        $('#secs').html(leadingZero(this_ctx.secs));
+                    }
+                }
+            }
+        });
+    }
+
+    // This starts the timer for the page
+    // if the event has started, else the
+    // timer does not start
+    this.startTimer = function() {
+        if (this.eventStarted) {
+            testIntervalTimer = setInterval(this.updateTimer, 1000);
+        }
+    }
+
+    //sync timer every 2 mins
+    this.startSync = function() {
+        if (this.eventStarted) {
+            syncIntervalTimer = setInterval(this.syncTimer, 120000);
+        }
+    }
+
+
+    // Call this function first time the object is created
+    // it will fill the fields and start the timer
+    this.init = function() {
+        this.setTime();
+        //this.updateTimer();
+        this.startTimer();
+        this.startSync();
+    }
+};
+
+var questionTimer = function() {
+    var bar = $('#progress-bar');
+    if (bar.length > 0) {
+        var form_submitted = false;
+        var max = bar.attr('time');
+        var value = 0;
+        var form_id = bar.attr('form_id');
+        var form = $('#'+form_id+'');
+
+        // instantiates a progress bar
+        /*
+        bar.progressbar({
+            value: value,
+            max: max,
+        });
+
+        // updates the progress bar every sec
+        var updateTimer = function() {
+            if (value < max) {
+                value = value + 1;
+                bar.progressbar('value', value);
+                console.log(value);
+            } else {
+                if (!form_submitted) {
+                    // submit the form
+                    form_submitted = true;
+                    form.submit();
+                }
+            }
+        }
+        */
+        var time = max;
+        bar.html(time);
+
+        var updateTimer = function() {
+            if (time > 0) {
+                time = time -1;
+                bar.html(time);
+            } else {
+                if (!form_submitted) {
+                    // submit the form
+                    form_submitted = true;
+                    form.submit();
+                }
+            }
+        }
+
+        // setInterval function called every sec
+        var timer = setInterval(updateTimer, 1000);
+    }
+};
+
+$(document).ready(function(){
+
+    // Create the time handler and call init
+    var tHandler =  new timeHandler();
+    tHandler.init();
+
+    $('body').click(function(event) {
+        var target = $(event.target);
+        var box = $('.problem-list-wrapper');
+        if(box.is(':hidden')) {
+            if(target.is('#problems')) {
+                var position = target.position();
+                var bottom = 27;
+                var left = position.left - 70;
+                box.css({'bottom': bottom+'px', 'left': left+'px'});
+                box.show();
+            } else {
+                box.hide();
+            }
+        } else {
+            box.hide();
+        }
+    });
+
+    // To mark the question for revision
+    $('.revision a').click(function() {
+        var link = $(this).attr('ajax');
+        var current = $(this);
+        if (link) {
+            $.post(link, function() {
+                current.parent().addClass('starred');
+            });
+        }
+        return false;
+    });
+
+    // call the question timer
+    questionTimer();
+});
+
+function updateProblemsTable(json_data) {
+    /**
+     * Update problems table on challenge problem page with data received
+     * in realtime, whenever a new submission is made.
+    **/
+    $('#'+json_data['solved_by_html_id']).html(json_data['solved_by_count']);
+    $('#'+json_data['accuracy_html_id']).html(json_data['accuracy_percentage']);
+    $('#'+json_data['accuracy_html_id']).attr('title', json_data['accuracy']);
+
+    // Need to set again the tipTip since it caches the previous value and
+    // the tool-tip is not delegate event binding
+    $('#'+json_data['accuracy_html_id']).tipTip({defaultPosition: 'top'});
+
+    if(!json_data['languages']) {
+        json_data['languages'] = '...';
+    }
+
+    $('#'+json_data['languages_html_id']).html(json_data['languages']);
+}
